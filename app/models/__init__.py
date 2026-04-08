@@ -1,4 +1,16 @@
 """
-models 패키지 — 테이블 구조 참고용 문서 파일들.
-supabase-py로 전환 후 SQLAlchemy 모델은 직접 사용하지 않는다.
+models 패키지
+
+from app.models import User, Post 처럼 짧게 import할 수 있다.
 """
+
+from app.models.user import User
+from app.models.study_room import StudyRoom
+from app.models.post import Post
+from app.models.post_image import PostImage
+from app.models.comment import Comment
+from app.models.like import Like
+from app.models.reservation import Reservation
+from app.models.room_settings import RoomSettings
+from app.models.study_group import StudyGroup
+from app.models.application import Application

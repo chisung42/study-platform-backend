@@ -1,25 +1,29 @@
 """
-Comment Repository (ERD Phase 1) — comments 테이블
+Comment Repository — 댓글 DB 조작
 """
 
-from supabase import Client
-from app.database import to_row, to_rows
+from sqlalchemy.orm import Session
+from app.models.comment import Comment
 
 
-def get_comments_by_post(db: Client, post_id: int):
-    res = db.table("comments").select("*").eq("post_id", post_id).order("created_at").execute()
-    return to_rows(res.data)
+def get_comments_by_post(db: Session, post_id: int):
+    """
+    특정 게시글의 댓글 목록 (오래된 순)
+
+    SQL: SELECT * FROM comments WHERE post_id = ? ORDER BY created_at ASC;
+    """
+    return db.query(Comment).filter(Comment.post_id == post_id).order_by(Comment.created_at.asc()).all()
 
 
-def get_comment_by_id(db: Client, comment_id: int):
-    res = db.table("comments").select("*").eq("id", comment_id).execute()
-    return to_row(res.data[0]) if res.data else None
+def create_comment(db: Session, comment: Comment):
+    """댓글 생성"""
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
 
 
-def create_comment(db: Client, data: dict):
-    res = db.table("comments").insert(data).execute()
-    return to_row(res.data[0]) if res.data else None
-
-
-def delete_comment(db: Client, comment_id: int):
-    db.table("comments").delete().eq("id", comment_id).execute()
+def delete_comment(db: Session, comment: Comment):
+    """댓글 삭제"""
+    db.delete(comment)
+    db.commit()

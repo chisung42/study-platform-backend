@@ -1,9 +1,12 @@
 """
-Comments Router (Phase 4: JWT 인증)
+Comments Router — 댓글 API
+
+댓글은 게시글에 종속되므로 URL이 /posts/{post_id}/comments 형태.
+작성/삭제: JWT 인증 필요 (Phase 4)
 """
 
 from fastapi import APIRouter, Depends, HTTPException
-from supabase import Client
+from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.database import get_db
@@ -14,7 +17,8 @@ router = APIRouter(prefix="/posts/{post_id}/comments", tags=["Comments"])
 
 
 @router.get("/", response_model=list[CommentResponse])
-def get_comments(post_id: int, db: Client = Depends(get_db)):
+def get_comments(post_id: int, db: Session = Depends(get_db)):
+    """댓글 목록 조회 — GET /posts/{post_id}/comments/"""
     return comment_service.get_comments(db, post_id)
 
 
@@ -22,9 +26,10 @@ def get_comments(post_id: int, db: Client = Depends(get_db)):
 def create_comment(
     post_id: int,
     request: CommentCreate,
-    db: Client = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """댓글 작성 — POST /posts/{post_id}/comments/"""
     try:
         return comment_service.create_comment(db, current_user.id, post_id, request)
     except ValueError as e:
@@ -34,9 +39,10 @@ def create_comment(
 @router.delete("/{comment_id}")
 def delete_comment(
     comment_id: int,
-    db: Client = Depends(get_db),
+    db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    """댓글 삭제 (본인만) — DELETE /posts/{post_id}/comments/{comment_id}"""
     try:
         comment_service.delete_comment(db, current_user.id, comment_id)
         return {"message": "댓글이 삭제되었습니다"}
