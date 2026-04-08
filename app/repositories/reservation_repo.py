@@ -1,63 +1,56 @@
 """
-Reservation Repository — 예약 DB 조작
+Reservation Repository (Phase 6: group_id, 인원 계산)
 """
 
 from datetime import datetime
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from app.models.reservation import Reservation
+from supabase import Client
+from app.database import to_row, to_rows
 
 
-def get_reservations_by_room(db: Session, room_id: int):
-    """
-    특정 스터디룸의 예약 목록
-
-    SQL: SELECT * FROM reservations WHERE room_id = ? ORDER BY start_time;
-    """
-    return db.query(Reservation).filter(Reservation.room_id == room_id).order_by(Reservation.start_time.asc()).all()
-
-
-def get_reservations_by_user(db: Session, user_id: int):
-    """
-    특정 유저의 예약 목록
-
-    SQL: SELECT * FROM reservations WHERE user_id = ? ORDER BY start_time;
-    """
-    return db.query(Reservation).filter(Reservation.user_id == user_id).order_by(Reservation.start_time.asc()).all()
+def get_reservations_by_room(db: Client, room_id: int):
+    res = (
+        db.table("reservations")
+        .select("*")
+        .eq("room_id", room_id)
+        .order("start_time")
+        .execute()
+    )
+    return to_rows(res.data)
 
 
-def get_overlapping_reservation(db: Session, room_id: int, start_time: datetime, end_time: datetime):
-    """
-    시간 겹침 체크 — 같은 방에 겹치는 예약이 있는지 조회
-
-    겹치는 조건: 기존 예약의 시작 < 새 예약의 끝 AND 기존 예약의 끝 > 새 예약의 시작
-    예: 기존 10:00~12:00, 새로 11:00~13:00 → 겹침!
-
-    and_(): 여러 조건을 AND로 묶는다
-
-    SQL: SELECT * FROM reservations
-         WHERE room_id = ?
-         AND start_time < ? AND end_time > ?
-         LIMIT 1;
-    """
-    return db.query(Reservation).filter(
-        and_(
-            Reservation.room_id == room_id,
-            Reservation.start_time < end_time,
-            Reservation.end_time > start_time,
-        )
-    ).first()
+def get_reservations_by_user(db: Client, user_id: int):
+    res = (
+        db.table("reservations")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("start_time")
+        .execute()
+    )
+    return to_rows(res.data)
 
 
-def create_reservation(db: Session, reservation: Reservation):
-    """예약 생성"""
-    db.add(reservation)
-    db.commit()
-    db.refresh(reservation)
-    return reservation
+def get_reservation_by_id(db: Client, reservation_id: int):
+    res = db.table("reservations").select("*").eq("id", reservation_id).execute()
+    return to_row(res.data[0]) if res.data else None
 
 
-def delete_reservation(db: Session, reservation: Reservation):
-    """예약 취소"""
-    db.delete(reservation)
-    db.commit()
+def get_overlapping_reservations(db: Client, room_id: int, start_time: datetime, end_time: datetime):
+    """겹치는 예약 전체 반환 (Phase 6 capacity 계산용)"""
+    res = (
+        db.table("reservations")
+        .select("*")
+        .eq("room_id", room_id)
+        .lt("start_time", end_time.isoformat())
+        .gt("end_time", start_time.isoformat())
+        .execute()
+    )
+    return to_rows(res.data)
+
+
+def create_reservation(db: Client, data: dict):
+    res = db.table("reservations").insert(data).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def delete_reservation(db: Client, reservation_id: int):
+    db.table("reservations").delete().eq("id", reservation_id).execute()

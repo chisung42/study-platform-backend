@@ -1,23 +1,24 @@
 """
-Reservation 스키마 — 예약 요청/응답 형태
+Reservation 스키마 (Phase 4: 운영시간 검증, Phase 6: group_id)
 """
 
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 
 
 class ReservationCreate(BaseModel):
-    """예약 생성 요청 (어떤 방에, 언제부터 언제까지)"""
     room_id: int
     start_time: datetime
     end_time: datetime
+    group_id: Optional[int] = None   # Phase 6: 그룹 예약
 
 
 class ReservationResponse(BaseModel):
-    """예약 응답"""
     id: int
     user_id: int
     room_id: int
     start_time: datetime
     end_time: datetime
+    group_id: Optional[int] = None
     created_at: datetime

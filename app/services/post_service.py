@@ -1,80 +1,101 @@
 """
-Post Service — 게시글 비즈니스 로직
-
-규칙:
-- 게시글 수정/삭제는 작성자 본인만 가능
-- 게시글 조회 시 조회수 +1
+Post Service (Phase 3: 이미지 업로드 포함)
 """
 
-from sqlalchemy.orm import Session
+import os
+import uuid
+from supabase import Client
 
-from app.models.post import Post
 from app.repositories import post_repo
 from app.schemas.post import PostCreate, PostUpdate
 
-
-def get_posts(db: Session):
-    """게시글 전체 목록"""
-    return post_repo.get_posts(db)
+BUCKET = "post-images"
 
 
-def get_post(db: Session, post_id: int):
-    """
-    게시글 상세 조회 + 조회수 증가
+def get_posts(db: Client):
+    posts = post_repo.get_posts(db)
+    for post in posts:
+        post["images"] = post_repo.get_post_images(db, post.id)
+    return posts
 
-    조회할 때마다 view_count를 1 올린다.
-    """
+
+def get_post(db: Client, post_id: int):
     post = post_repo.get_post_by_id(db, post_id)
     if not post:
         raise ValueError("게시글을 찾을 수 없습니다")
-
-    # 조회수 +1
-    post.view_count += 1
-    post_repo.update_post(db, post)
+    post_repo.increment_view_count(db, post_id, int(post.view_count))
+    post["view_count"] = int(post.view_count) + 1
+    post["images"] = post_repo.get_post_images(db, post_id)
     return post
 
 
-def create_post(db: Session, user_id: int, request: PostCreate):
-    """게시글 작성"""
-    new_post = Post(
-        user_id=user_id,
-        title=request.title,
-        content=request.content,
-    )
-    return post_repo.create_post(db, new_post)
+def create_post(db: Client, user_id: int, request: PostCreate):
+    data = {"user_id": user_id, "title": request.title, "content": request.content}
+    post = post_repo.create_post(db, data)
+    post["images"] = []
+    return post
 
 
-def update_post(db: Session, user_id: int, post_id: int, request: PostUpdate):
-    """
-    게시글 수정
-
-    규칙: 작성자 본인만 수정 가능
-    """
+def update_post(db: Client, user_id: int, post_id: int, request: PostUpdate):
     post = post_repo.get_post_by_id(db, post_id)
     if not post:
         raise ValueError("게시글을 찾을 수 없습니다")
-    if post.user_id != user_id:
+    if int(post.user_id) != user_id:
         raise PermissionError("본인의 게시글만 수정할 수 있습니다")
 
-    # None이 아닌 필드만 수정 (보낸 것만 바꾼다)
+    updates = {}
     if request.title is not None:
-        post.title = request.title
+        updates["title"] = request.title
     if request.content is not None:
-        post.content = request.content
+        updates["content"] = request.content
 
-    return post_repo.update_post(db, post)
+    updated = post_repo.update_post(db, post_id, updates)
+    updated["images"] = post_repo.get_post_images(db, post_id)
+    return updated
 
 
-def delete_post(db: Session, user_id: int, post_id: int):
-    """
-    게시글 삭제
-
-    규칙: 작성자 본인만 삭제 가능
-    """
+def delete_post(db: Client, user_id: int, post_id: int):
     post = post_repo.get_post_by_id(db, post_id)
     if not post:
         raise ValueError("게시글을 찾을 수 없습니다")
-    if post.user_id != user_id:
+    if int(post.user_id) != user_id:
         raise PermissionError("본인의 게시글만 삭제할 수 있습니다")
+    post_repo.delete_post(db, post_id)
 
-    post_repo.delete_post(db, post)
+
+# ── 이미지 (Phase 3) ──
+
+def upload_image(db: Client, user_id: int, post_id: int, file_bytes: bytes, filename: str):
+    """Supabase Storage에 이미지 업로드 후 URL을 post_images에 저장"""
+    post = post_repo.get_post_by_id(db, post_id)
+    if not post:
+        raise ValueError("게시글을 찾을 수 없습니다")
+    if int(post.user_id) != user_id:
+        raise PermissionError("본인의 게시글에만 이미지를 업로드할 수 있습니다")
+
+    ext = filename.rsplit(".", 1)[-1] if "." in filename else "png"
+    storage_path = f"{post_id}/{uuid.uuid4()}.{ext}"
+
+    db.storage.from_(BUCKET).upload(
+        path=storage_path,
+        file=file_bytes,
+        file_options={"content-type": f"image/{ext}"},
+    )
+    public_url = db.storage.from_(BUCKET).get_public_url(storage_path)
+    return post_repo.add_image(db, post_id, public_url)
+
+
+def delete_image(db: Client, user_id: int, post_id: int, image_id: int):
+    post = post_repo.get_post_by_id(db, post_id)
+    if not post:
+        raise ValueError("게시글을 찾을 수 없습니다")
+    if int(post.user_id) != user_id:
+        raise PermissionError("본인의 게시글 이미지만 삭제할 수 있습니다")
+
+    image = post_repo.get_image_by_id(db, image_id)
+    if not image:
+        raise ValueError("이미지를 찾을 수 없습니다")
+    if int(image.post_id) != post_id:
+        raise ValueError("해당 게시글의 이미지가 아닙니다")
+
+    post_repo.delete_image(db, image_id)

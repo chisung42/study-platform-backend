@@ -1,63 +1,57 @@
 """
-Post Repository — 게시글 DB 조작
+Post Repository (Phase 3: images 포함)
 """
 
-from sqlalchemy.orm import Session
-from app.models.post import Post
+from datetime import datetime, timezone
+from supabase import Client
+from app.database import to_row, to_rows
 
 
-def get_posts(db: Session):
-    """
-    게시글 전체 목록 조회 (최신순)
-
-    .order_by(Post.created_at.desc()): 최신 글이 위로
-    .all(): 전부 가져오기
-
-    SQL: SELECT * FROM posts ORDER BY created_at DESC;
-    """
-    return db.query(Post).order_by(Post.created_at.desc()).all()
+def get_posts(db: Client):
+    res = db.table("posts").select("*").order("created_at", desc=True).execute()
+    return to_rows(res.data)
 
 
-def get_post_by_id(db: Session, post_id: int):
-    """
-    게시글 1개 조회
-
-    SQL: SELECT * FROM posts WHERE id = ? LIMIT 1;
-    """
-    return db.query(Post).filter(Post.id == post_id).first()
+def get_post_by_id(db: Client, post_id: int):
+    res = db.table("posts").select("*").eq("id", post_id).execute()
+    return to_row(res.data[0]) if res.data else None
 
 
-def create_post(db: Session, post: Post):
-    """
-    게시글 생성
-
-    SQL: INSERT INTO posts (user_id, title, content) VALUES (...);
-    """
-    db.add(post)
-    db.commit()
-    db.refresh(post)
-    return post
+def get_post_images(db: Client, post_id: int):
+    res = db.table("post_images").select("*").eq("post_id", post_id).execute()
+    return to_rows(res.data)
 
 
-def update_post(db: Session, post: Post):
-    """
-    게시글 수정
-
-    이미 조회해서 수정한 post 객체를 DB에 반영한다.
-    db.commit()하면 변경된 필드만 UPDATE된다.
-
-    SQL: UPDATE posts SET title=?, content=? WHERE id=?;
-    """
-    db.commit()
-    db.refresh(post)
-    return post
+def create_post(db: Client, data: dict):
+    res = db.table("posts").insert(data).execute()
+    return to_row(res.data[0]) if res.data else None
 
 
-def delete_post(db: Session, post: Post):
-    """
-    게시글 삭제
+def increment_view_count(db: Client, post_id: int, current_count: int):
+    db.table("posts").update({"view_count": current_count + 1}).eq("id", post_id).execute()
 
-    SQL: DELETE FROM posts WHERE id = ?;
-    """
-    db.delete(post)
-    db.commit()
+
+def update_post(db: Client, post_id: int, data: dict):
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    res = db.table("posts").update(data).eq("id", post_id).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def delete_post(db: Client, post_id: int):
+    db.table("posts").delete().eq("id", post_id).execute()
+
+
+# ── 이미지 ──
+
+def add_image(db: Client, post_id: int, image_url: str):
+    res = db.table("post_images").insert({"post_id": post_id, "image_url": image_url}).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def get_image_by_id(db: Client, image_id: int):
+    res = db.table("post_images").select("*").eq("id", image_id).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def delete_image(db: Client, image_id: int):
+    db.table("post_images").delete().eq("id", image_id).execute()

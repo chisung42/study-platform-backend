@@ -1,39 +1,30 @@
 """
-Like Repository — 좋아요 DB 조작
+Like Repository (ERD Phase 1) — likes 테이블
 """
 
-from sqlalchemy.orm import Session
-from app.models.like import Like
+from supabase import Client
+from app.database import to_row
 
 
-def get_like(db: Session, user_id: int, post_id: int):
-    """
-    특정 유저가 특정 게시글에 좋아요 했는지 조회
-
-    SQL: SELECT * FROM likes WHERE user_id = ? AND post_id = ? LIMIT 1;
-    """
-    return db.query(Like).filter(Like.user_id == user_id, Like.post_id == post_id).first()
-
-
-def get_like_count(db: Session, post_id: int):
-    """
-    게시글의 좋아요 수
-
-    .count(): 행의 개수를 반환
-    SQL: SELECT COUNT(*) FROM likes WHERE post_id = ?;
-    """
-    return db.query(Like).filter(Like.post_id == post_id).count()
+def get_like(db: Client, user_id: int, post_id: int):
+    res = (
+        db.table("likes")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("post_id", post_id)
+        .execute()
+    )
+    return to_row(res.data[0]) if res.data else None
 
 
-def create_like(db: Session, like: Like):
-    """좋아요 생성"""
-    db.add(like)
-    db.commit()
-    db.refresh(like)
-    return like
+def get_like_count(db: Client, post_id: int) -> int:
+    res = db.table("likes").select("*", count="exact").eq("post_id", post_id).execute()
+    return res.count or 0
 
 
-def delete_like(db: Session, like: Like):
-    """좋아요 취소"""
-    db.delete(like)
-    db.commit()
+def create_like(db: Client, data: dict):
+    db.table("likes").insert(data).execute()
+
+
+def delete_like(db: Client, like_id: int):
+    db.table("likes").delete().eq("id", like_id).execute()

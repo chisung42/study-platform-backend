@@ -1,30 +1,30 @@
 """
-Post 스키마 — 게시글 요청/응답 형태
+Post 스키마 (Phase 3 이후: images 포함)
 """
 
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 
 
+class PostImageResponse(BaseModel):
+    id: int
+    post_id: int
+    image_url: str
+    created_at: datetime
+
+
 class PostCreate(BaseModel):
-    """게시글 작성 요청 (제목 + 본문만 받음, 작성자는 토큰에서 추출)"""
     title: str
     content: str
 
 
 class PostUpdate(BaseModel):
-    """
-    게시글 수정 요청
-
-    str | None = None: 안 보내면 None → 수정하지 않음
-    제목만 바꾸고 싶으면 {"title": "새 제목"} 만 보내면 된다
-    """
-    title: str | None = None
-    content: str | None = None
+    title: Optional[str] = None
+    content: Optional[str] = None
 
 
 class PostResponse(BaseModel):
-    """게시글 응답"""
     id: int
     user_id: int
     title: str
@@ -32,3 +32,4 @@ class PostResponse(BaseModel):
     view_count: int
     created_at: datetime
     updated_at: datetime
+    images: list[PostImageResponse] = []

@@ -1,24 +1,43 @@
 """
-Room Repository — 스터디룸 DB 조작
+Room Repository (Phase 2: capacity/description, Phase 4: settings)
 """
 
-from sqlalchemy.orm import Session
-from app.models.study_room import StudyRoom
+from supabase import Client
+from app.database import to_row, to_rows
 
 
-def get_rooms(db: Session):
-    """
-    스터디룸 전체 목록 조회
-
-    SQL: SELECT * FROM study_rooms;
-    """
-    return db.query(StudyRoom).all()
+def get_rooms(db: Client):
+    res = db.table("study_rooms").select("*").execute()
+    return to_rows(res.data)
 
 
-def get_room_by_id(db: Session, room_id: int):
-    """
-    스터디룸 1개 조회
+def get_room_by_id(db: Client, room_id: int):
+    res = db.table("study_rooms").select("*").eq("id", room_id).execute()
+    return to_row(res.data[0]) if res.data else None
 
-    SQL: SELECT * FROM study_rooms WHERE id = ? LIMIT 1;
-    """
-    return db.query(StudyRoom).filter(StudyRoom.id == room_id).first()
+
+def create_room(db: Client, data: dict):
+    res = db.table("study_rooms").insert(data).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def update_room(db: Client, room_id: int, data: dict):
+    res = db.table("study_rooms").update(data).eq("id", room_id).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def delete_room(db: Client, room_id: int):
+    db.table("study_rooms").delete().eq("id", room_id).execute()
+
+
+# ── 룸 설정 ──
+
+def get_settings(db: Client, room_id: int):
+    res = db.table("room_settings").select("*").eq("room_id", room_id).execute()
+    return to_row(res.data[0]) if res.data else None
+
+
+def upsert_settings(db: Client, room_id: int, data: dict):
+    data["room_id"] = room_id
+    res = db.table("room_settings").upsert(data, on_conflict="room_id").execute()
+    return to_row(res.data[0]) if res.data else None
